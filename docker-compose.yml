@@ -1,0 +1,8 @@
+dev:
+  build: .
+  ports:
+    - "8000:8000"
+  tty: true
+  volumes:
+    - ./src:/hackathon-api-server/src
+  working_dir: /hackathon-api-server
