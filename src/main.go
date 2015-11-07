@@ -24,12 +24,18 @@ func main() {
 	defer file.Close()
 	secret, err := ioutil.ReadAll(file)
 	accessToken := requestFBAccessToken(strings.TrimSpace(string(secret)))
-	println(string(requestPhotosForAlbum(accessToken, album2ID)))
+	dumpJson(requestPhotosForAlbum(accessToken, album2ID))
+
 
 //	http.HandleFunc("/", doShit)
-//	if http.ListenAndServe(":8000", nil) != nil {
-//		fmt.Println("We aren't doing shit")
-//	}
+	if http.ListenAndServe(":8000", nil) != nil {
+		fmt.Println("We aren't doing shit")
+	}
+}
+
+func dumpJson(i interface{}) {
+	out, _ := json.MarshalIndent(i, "", "  ")
+	fmt.Println(string(out))
 }
 
 func doShit(w http.ResponseWriter, r *http.Request) {
@@ -64,19 +70,37 @@ func requestFBAccessToken(secret string) string {
 	return m["access_token"].(string)
 }
 
-func requestPhotosForAlbum(accessToken string, albumID string) []interface{} {
+func requestPhotosForAlbum(accessToken string, albumID string) []*Photo {
 	resp, err := http.Get(facebookApiEndpoint + "/" + album2ID + "/photos?" +
 						  "access_token=" + accessToken +
 						  "&fields=images")
 	if err != nil {
-		println("Whoops! WTF happened?")
-		return []interface{}{}
+		fmt.Println("Whoops! WTF happened?", err)
+
 	}
 
 	defer resp.Body.Close()
 	body, err := ioutil.ReadAll(resp.Body)
-	var f interface{}
+	var f Fuck
 	err = json.Unmarshal(body, &f)
-	m := f.(map[string]interface{})
-	return m["data"].([]interface{})
+	if err != nil {
+		fmt.Println("ERROR BITCHES: ", err)
+	}
+
+	return f.Data
+}
+
+type Photo struct {
+	Images []Image `json:"images"`
+}
+
+type Image struct {
+	Height int
+	Source string
+	Width int
+}
+
+type Fuck struct {
+	Data []*Photo
+	Paging interface{}
 }
