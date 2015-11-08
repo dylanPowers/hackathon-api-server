@@ -4,30 +4,34 @@ import "fmt"
 import (
 	"net/http"
 	"io/ioutil"
-	"io"
 	"encoding/json"
 	"os"
 	"strings"
+	"./fb"
 )
 
-const facebookApiEndpoint = "https://graph.facebook.com/v2.5"
-const album2ID = "615849938471305"
-const album3ID = "855587011164262"
-
 func main() {
+	pServer := new(PhotoServer)
+	pServer.serve()
+}
+
+type PhotoServer struct {
+	fbAccessToken string
+}
+
+func (pServ *PhotoServer) serve() {
 	file, err := os.Open("fb-client-secret")
 	if err != nil {
-		fmt.Println("Can't do shit")
+		fmt.Println("Can't do shit", err)
 		return
 	}
 
 	defer file.Close()
 	secret, err := ioutil.ReadAll(file)
-	accessToken := requestFBAccessToken(strings.TrimSpace(string(secret)))
-	dumpJson(requestPhotosForAlbum(accessToken, album2ID))
+	pServ.fbAccessToken = fb.RequestFBAccessToken(strings.TrimSpace(string(secret)))
 
-
-//	http.HandleFunc("/", doShit)
+	println("Facebook access token: ", pServ.fbAccessToken)
+	http.HandleFunc("/v1/photos/", pServ.servePhotos)
 	if http.ListenAndServe(":8000", nil) != nil {
 		fmt.Println("We aren't doing shit")
 	}
@@ -38,69 +42,39 @@ func dumpJson(i interface{}) {
 	fmt.Println(string(out))
 }
 
-func doShit(w http.ResponseWriter, r *http.Request) {
-	fmt.Println("Doing shit")
-	io.WriteString(w, "Did some shit\n")
+
+func (pServ *PhotoServer) servePhotos(w http.ResponseWriter, req *http.Request) {
+	switch(req.URL.Path) {
+	case "/v1/photos/2":
+		fmt.Println("Photos year 2")
+		photos := fb.RequestPhotosForAlbum(pServ.fbAccessToken, fb.Album2ID)
+		writePhotos(photos, w)
+	case "/v2/photos/3":
+		fmt.Println("Photos year 3")
+		photos := fb.RequestPhotosForAlbum(pServ.fbAccessToken, fb.Album3ID)
+		writePhotos(photos, w)
+	default:
+		fmt.Println(req.URL.Path)
+	}
 }
 
-func requestFBAccessToken(secret string) string {
-	resp, err := http.Get(facebookApiEndpoint + "/oauth/access_token?" +
-					  "client_id=162401547444127" +
-					  "&client_secret=" + secret +
-					  "&grant_type=client_credentials")
-	if err != nil {
-		fmt.Println("fail")
-		return ""
-	}
-
-	defer resp.Body.Close()
-	body, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		fmt.Println("Can't read no body")
-		return ""
-	}
-
-	var f interface{}
-	err = json.Unmarshal(body, &f)
-	if err != nil {
-		fmt.Println("Wat?!?")
-		return ""
-	}
-	m := f.(map[string]interface{})
-	return m["access_token"].(string)
-}
-
-func requestPhotosForAlbum(accessToken string, albumID string) []*Photo {
-	resp, err := http.Get(facebookApiEndpoint + "/" + album2ID + "/photos?" +
-						  "access_token=" + accessToken +
-						  "&fields=images")
-	if err != nil {
-		fmt.Println("Whoops! WTF happened?", err)
-
-	}
-
-	defer resp.Body.Close()
-	body, err := ioutil.ReadAll(resp.Body)
-	var f Fuck
-	err = json.Unmarshal(body, &f)
-	if err != nil {
-		fmt.Println("ERROR BITCHES: ", err)
-	}
-
-	return f.Data
+func writePhotos(photos []*fb.Photo, w http.ResponseWriter) {
+		response := make([]Photo, len(photos))
+		for i, photo := range photos {
+			response[i] = Photo {
+				Link: photo.Images[0].Source,
+				LinkMini: photo.Picture,
+				Height: photo.Images[0].Height,
+				Width: photo.Images[0].Width,
+			}
+		}
+		jsonResp, _ := json.Marshal(response)
+		w.Write(jsonResp)
 }
 
 type Photo struct {
-	Images []Image `json:"images"`
-}
-
-type Image struct {
-	Height int
-	Source string
-	Width int
-}
-
-type Fuck struct {
-	Data []*Photo
-	Paging interface{}
+	Link string `json:"link"`
+	LinkMini string `json:"link_mini"`
+	Height int `json:"height"`
+	Width int	`json:"width"`
 }
